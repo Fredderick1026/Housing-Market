@@ -1,0 +1,202 @@
+---
+title: "BAS 474 Final Project - Fall 2022"
+author: "Marshall Summar"
+date: '2022-11-14'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+RENT <- read.csv("Rent_Data_by_Zip.csv",header=T)
+RENT_3 <- RENT
+RENT_3$rent_mean[which(RENT_3$rent_mean==0)] <- NA
+require(caret)
+library(pROC)
+
+base <- RENT_3[complete.cases(RENT_3),]
+set.seed(2023); train.zips <- sample(unique(base$zip_code),.7*length(unique(base$zip_code)))
+train.rows <- which(base$zip_code %in% train.zips)
+
+TRAIN <- base[train.rows,]
+HOLDOUT <- base[-train.rows,]
+```
+
+
+```{r setup, include=FALSE}
+#GLM Model
+fitControl <- trainControl(method="cv",number=5) 
+set.seed(474); GLM <- train(nextYearRent~rent_mean+rent_min+rent_max+rent_sd+NumHouseholds+medianHousholdIncomeUSD+YearMortgageInterestRate309+homePrice_mean+homePrice_min+homePrice_max+homePrice_sd,
+                            data=TRAIN,
+                            method = "glm",
+                            trControl=fitControl,
+                            preProc=c("center", "scale"))
+
+GLM$results
+varImp(GLM)
+```
+
+
+
+
+```{r setup, include=FALSE}
+#GLMnet
+glmnetGrid <- expand.grid(alpha = seq(0,1,.1),lambda = 10^seq(-5,-1,by=0.25))
+set.seed(474); GLMNET <- train(nextYearRent~rent_mean+rent_min+rent_max+rent_sd+NumHouseholds+medianHousholdIncomeUSD+YearMortgageInterestRate309+homePrice_mean+homePrice_min+homePrice_max+homePrice_sd,
+                            data=TRAIN,
+                            method = "glmnet",
+                            tuneGrid=glmnetGrid,
+                            trControl=fitControl,
+                            preProc=c("center", "scale"))
+
+GLMNET$results[rownames(GLMNET$bestTune),]
+plot(GLMNET)
+
+postResample(predict(GLMNET, newdata = HOLDOUT), HOLDOUT$nextYearRent)
+```
+
+
+```{r setup, include=FALSE}
+#RPART
+rpartGrid <- expand.grid(cp=10^seq(-5,-1,by=0.2))
+set.seed(474); RPART <- train(nextYearRent~rent_mean+rent_min+rent_max+rent_sd+NumHouseholds+medianHousholdIncomeUSD+YearMortgageInterestRate309+homePrice_mean+homePrice_min+homePrice_max+homePrice_sd,
+               data = TRAIN,
+               method = "rpart",
+               tuneGrid = rpartGrid,
+               trControl=fitControl,
+               preProc=c("center", "scale"))
+
+RPART$results[rownames(RPART$bestTune),]
+plot(RPART)
+```
+
+
+```{r setup, include=FALSE}
+#FOREST
+forestGrid <- expand.grid(mtry=c(1,3,5))
+set.seed(474); FOREST <- train(nextYearRent~rent_mean+rent_min+rent_max+rent_sd+NumHouseholds+medianHousholdIncomeUSD+YearMortgageInterestRate309+homePrice_mean+homePrice_min+homePrice_max+homePrice_sd,
+data = TRAIN,
+method = "rf",
+trControl=fitControl,
+preProc=c("center", "scale"), tuneGrid = forestGrid)
+
+FOREST$results[rownames(FOREST$bestTune),]
+plot(FOREST)
+
+postResample(predict(FOREST, newdata = HOLDOUT), HOLDOUT$nextYearRent)
+```
+
+
+```{r setup, include=FALSE}
+#TREE
+treeGrid <- expand.grid(cp=10^seq(-5,-1,by=0.5))
+set.seed(474); TREE <- train(nextYearRent~rent_mean+rent_min+rent_max+rent_sd+NumHouseholds+medianHousholdIncomeUSD+YearMortgageInterestRate309+homePrice_mean+homePrice_min+homePrice_max+homePrice_sd,
+               data = TRAIN,
+               method = "rpart",
+               tuneGrid = treeGrid,
+               trControl=fitControl,
+               preProc=c("center", "scale"))
+
+TREE$results[rownames(TREE$bestTune),]
+
+postResample(predict(TREE, newdata = HOLDOUT), HOLDOUT$nextYearRent)
+```
+
+```{r}
+
+```
+
+
+```{r setup, include=FALSE}
+#SVM
+svmGrid <- expand.grid(C=10^seq(-3.5,-1.5,by=.5) )
+set.seed(474); SVM <- train(nextYearRent~rent_mean+rent_min+rent_max+rent_sd+NumHouseholds+medianHousholdIncomeUSD+YearMortgageInterestRate309+homePrice_mean+homePrice_min+homePrice_max+homePrice_sd,
+                            data=TRAIN, 
+                            method='svmLinear', 
+                            trControl=fitControl, 
+                            verbose=FALSE,
+                            tuneGrid = svmGrid, preProc = c("center", "scale"))
+
+SVM$results
+```
+
+```{r}
+#SVMpoly
+svmGrid <- expand.grid(degree=c(3,4), C=10^seq(-2,-0.5,by=.5), scale=10^seq(-3,-1.5,by=.5))
+set.seed(474); SVMpoly <- train(nextYearRent~rent_mean+rent_min+rent_max+rent_sd+NumHouseholds+medianHousholdIncomeUSD+YearMortgageInterestRate309+homePrice_mean+homePrice_min+homePrice_max+homePrice_sd,
+                            data=TRAIN, 
+                            method='svmPoly', 
+                            trControl=fitControl, 
+                            verbose=FALSE,
+                            tuneGrid = svmGrid, preProc = c("center", "scale"))
+
+SVMpoly$results[rownames(SVMpoly$bestTune),]
+
+postResample(predict(SVMpoly, newdata = HOLDOUT), HOLDOUT$nextYearRent)
+```
+
+```{r}
+svmGrid <- expand.grid( sigma=10^seq(-3.5,-1,by=.5),C=10^seq(-1,1,by=.5) )
+set.seed(474); SVMradial <- train(nextYearRent~rent_mean+rent_min+rent_max+rent_sd+NumHouseholds+medianHousholdIncomeUSD+YearMortgageInterestRate309+homePrice_mean+homePrice_min+homePrice_max+homePrice_sd,
+                            data=TRAIN, 
+                            method='svmRadial', 
+                            trControl=fitControl, 
+                            verbose=FALSE,
+                            tuneGrid = svmGrid, preProc = c("center", "scale"))
+
+SVMradial$results[rownames(SVMradial$bestTune),]
+
+postResample(predict(SVMradial, newdata = HOLDOUT), HOLDOUT$nextYearRent)
+```
+
+
+```{r}
+
+incomes <- RENT_3[which(RENT_3$Year == 2022),"medianHousholdIncomeUSD"] *1.25
+preds <- predict(SVMpoly,newdata = RENT_3[which(RENT_3$Year == 2022),])
+#prediction for every unique rent for each dataset 
+mod <- lm(incomes~preds, drop.unused.levels = TRUE)
+plot(incomes~preds)
+abline(mod)
+
+
+sub <- RENT_3[which(RENT_3$Year == 2022),]
+sub$resids <- mod$residuals
+sub$preds <- preds
+write.csv(sub,"2023predictedrents.csv",row.names = F)
+
+```
+
+```{r}
+hist(RENT_3$rent_mean)
+hist(Rent_2$rent_mean)
+
+boxplot(rent_mean~State, data=RENT_3)
+
+length(which(RENT$rent_mean<=200))
+Rent_2 <- RENT[-which(RENT$rent_mean<=150)]
+
+hist(Rent_2$rent_mean)
+boxplot(rent_mean~State, data=Rent_2)
+
+boxplot(medianHousholdIncomeUSD~State, data = RENT)
+
+summary(RENT$rent_mean)
+
+summary(RENT$medianHousholdIncomeUSD)
+
+hist(RENT_3$medianHousholdIncomeUSD)
+
+RENT_3 <- RENT
+
+RENT_3$rent_mean[which(RENT_3$rent_mean==0)] <- NA
+mean(RENT_3$rent_mean, na.rm = TRUE)
+mean(RENT$rent_mean)
+
+plot(RENT_3$rent_mean~RENT_3$medianHousholdIncomeUSD)
+
+mod2 <- lm(RENT_3$rent_mean~RENT_3$medianHousholdIncomeUSD, drop.unused.levels = TRUE)
+plot(RENT_3$rent_mean~RENT_3$medianHousholdIncomeUSD)
+abline(mod2)
+
+```
+
